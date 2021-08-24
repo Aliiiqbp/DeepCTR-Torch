@@ -11,6 +11,7 @@ import torch.nn as nn
 from .basemodel import BaseModel
 from ..inputs import combined_dnn_input
 from ..layers import DNN
+from deepctr_torch.inputs import SparseFeat, DenseFeat
 
 
 class WDL(BaseModel):
@@ -47,7 +48,31 @@ class WDL(BaseModel):
         self.use_dnn = len(dnn_feature_columns) > 0 and len(
             dnn_hidden_units) > 0
         if self.use_dnn:
-            self.dnn = DNN(self.compute_input_dim(dnn_feature_columns), dnn_hidden_units,
+            self.not_user_sparse_features = []
+            self.user_sparse_features = []
+            self.not_user_dense_features = []
+            self.user_dense_features = []
+            for feature in dnn_feature_columns:
+                if isinstance(feature, SparseFeat):
+                    if feature.is_user_feature:
+                        self.user_sparse_features.append(feature)
+                    else:
+                        self.not_user_sparse_features.append(feature)
+                elif isinstance(feature, DenseFeat):
+                    if feature.is_user_feature:
+                        self.user_dense_features.append(feature)
+                    else:
+                        self.not_user_dense_features.append(feature)
+            user_features = self.user_sparse_features + self.user_dense_features
+            self.use_user_dnn = len(user_features) > 0
+            if self.use_user_dnn:
+                self.user_dnn = DNN(self.compute_input_dim(user_features), dnn_hidden_units,
+                                    activation=dnn_activation, l2_reg=l2_reg_dnn, dropout_rate=dnn_dropout,
+                                    use_bn=dnn_use_bn,
+                                    init_std=init_std, device=device)
+            other_user_features = self.not_user_dense_features + self.not_user_sparse_features
+            output_user_embedding_dim = 5
+            self.dnn = DNN(self.compute_input_dim(other_user_features) + output_user_embedding_dim, dnn_hidden_units,
                            activation=dnn_activation, l2_reg=l2_reg_dnn, dropout_rate=dnn_dropout, use_bn=dnn_use_bn,
                            init_std=init_std, device=device)
             self.dnn_linear = nn.Linear(dnn_hidden_units[-1], 1, bias=False).to(device)

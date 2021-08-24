@@ -19,11 +19,11 @@ DEFAULT_GROUP_NAME = "default_group"
 
 class SparseFeat(namedtuple('SparseFeat',
                             ['name', 'vocabulary_size', 'embedding_dim', 'use_hash', 'dtype', 'embedding_name',
-                             'group_name'])):
+                             'group_name', 'is_user_feature'])):
     __slots__ = ()
 
     def __new__(cls, name, vocabulary_size, embedding_dim=4, use_hash=False, dtype="int32", embedding_name=None,
-                group_name=DEFAULT_GROUP_NAME):
+                group_name=DEFAULT_GROUP_NAME, is_user_feature=False):
         if embedding_name is None:
             embedding_name = name
         if embedding_dim == "auto":
@@ -32,7 +32,7 @@ class SparseFeat(namedtuple('SparseFeat',
             print(
                 "Notice! Feature Hashing on the fly currently is not supported in torch version,you can use tensorflow version!")
         return super(SparseFeat, cls).__new__(cls, name, vocabulary_size, embedding_dim, use_hash, dtype,
-                                              embedding_name, group_name)
+                                              embedding_name, group_name, is_user_feature)
 
     def __hash__(self):
         return self.name.__hash__()
@@ -77,11 +77,11 @@ class VarLenSparseFeat(namedtuple('VarLenSparseFeat',
         return self.name.__hash__()
 
 
-class DenseFeat(namedtuple('DenseFeat', ['name', 'dimension', 'dtype'])):
+class DenseFeat(namedtuple('DenseFeat', ['name', 'dimension', 'dtype', 'is_user_feature'])):
     __slots__ = ()
 
-    def __new__(cls, name, dimension=1, dtype="float32"):
-        return super(DenseFeat, cls).__new__(cls, name, dimension, dtype)
+    def __new__(cls, name, dimension=1, dtype="float32", is_user_feature=False):
+        return super(DenseFeat, cls).__new__(cls, name, dimension, dtype, is_user_feature)
 
     def __hash__(self):
         return self.name.__hash__()
@@ -239,7 +239,7 @@ def get_dense_input(X, features, feature_columns):
 
 
 def maxlen_lookup(X, sparse_input_dict, maxlen_column):
-    if maxlen_column is None or len(maxlen_column)==0:
+    if maxlen_column is None or len(maxlen_column) == 0:
         raise ValueError('please add max length column for VarLenSparseFeat of DIN/DIEN input')
     lookup_idx = np.array(sparse_input_dict[maxlen_column[0]])
     return X[:, lookup_idx[0]:lookup_idx[1]].long()
