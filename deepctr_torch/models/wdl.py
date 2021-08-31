@@ -63,16 +63,19 @@ class WDL(BaseModel):
                         self.user_dense_features.append(feature)
                     else:
                         self.not_user_dense_features.append(feature)
-            user_features = self.user_sparse_features + self.user_dense_features
-            self.use_user_dnn = len(user_features) > 0
+            self.user_features = self.user_sparse_features + self.user_dense_features
+            self.use_user_dnn = len(self.user_features) > 0
+            self.output_user_embedding_dim = 128
             if self.use_user_dnn:
-                self.user_dnn = DNN(self.compute_input_dim(user_features), dnn_hidden_units,
+                self.user_dnn = DNN(self.compute_input_dim(self.user_features), dnn_hidden_units,
                                     activation=dnn_activation, l2_reg=l2_reg_dnn, dropout_rate=dnn_dropout,
                                     use_bn=dnn_use_bn,
                                     init_std=init_std, device=device)
+                self.add_regularization_weight(
+                    filter(lambda x: 'weight' in x[0] and 'bn' not in x[0], self.user_dnn.named_parameters()),
+                    l2=l2_reg_dnn)
             other_user_features = self.not_user_dense_features + self.not_user_sparse_features
-            output_user_embedding_dim = 5
-            self.dnn = DNN(self.compute_input_dim(other_user_features) + output_user_embedding_dim, dnn_hidden_units,
+            self.dnn = DNN(self.compute_input_dim(other_user_features) + self.output_user_embedding_dim, dnn_hidden_units,
                            activation=dnn_activation, l2_reg=l2_reg_dnn, dropout_rate=dnn_dropout, use_bn=dnn_use_bn,
                            init_std=init_std, device=device)
             self.dnn_linear = nn.Linear(dnn_hidden_units[-1], 1, bias=False).to(device)
@@ -83,12 +86,19 @@ class WDL(BaseModel):
         self.to(device)
 
     def forward(self, X):
-
-        sparse_embedding_list, dense_value_list = self.input_from_feature_columns(X, self.dnn_feature_columns,
-                                                                                  self.embedding_dict)
         logit = self.linear_model(X)
 
         if self.use_dnn:
+            if self.use_user_dnn:
+                user_sparse_embedding_list, user_dense_value_list = \
+                    self.input_from_feature_columns(X, self.user_features, self.embedding_dict)
+                user_dnn_input = combined_dnn_input(user_sparse_embedding_list, user_dense_value_list)
+                user_dnn_output = self.dnn(user_dnn_input)
+                # TODO: add user_dnn_output to dense features
+
+            feature_columns = self.not_user_dense_features + self.not_user_sparse_features
+            sparse_embedding_list, dense_value_list = self.input_from_feature_columns(X, feature_columns,
+                                                                                      self.embedding_dict)
             dnn_input = combined_dnn_input(sparse_embedding_list, dense_value_list)
 
             dnn_output = self.dnn(dnn_input)
